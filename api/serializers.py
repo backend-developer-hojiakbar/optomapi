@@ -8,26 +8,35 @@ class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
         fields = '__all__'
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        validated_data['id'] = f"role_{shortuuid.random(length=8)}"
+        return super().create(validated_data)
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
     role = RoleSerializer(read_only=True)
     roleId = serializers.CharField(write_only=True, source='role_id')
-    pin = serializers.CharField(write_only=True, min_length=4, max_length=4, required=False)
+    pin = serializers.CharField(write_only=True, min_length=4, max_length=4, required=False, allow_blank=True)
 
     class Meta:
         model = Employee
         fields = ['id', 'name', 'phone', 'role', 'roleId', 'pin']
+        read_only_fields = ['id']
 
     def create(self, validated_data):
-        validated_data['id'] = f"emp_{shortuuid.random(length=8)}"
         pin = validated_data.pop('pin', None)
-        if not pin: raise serializers.ValidationError("PIN is required for new employee")
+        if not pin:
+            raise serializers.ValidationError({"pin": "Yangi xodim uchun PIN majburiy."})
+        role_id = validated_data.pop('role_id')
+        role = Role.objects.get(id=role_id)
         user = Employee.objects.create_user(
             phone=validated_data['phone'],
             name=validated_data['name'],
-            role_id=validated_data['role_id'],
-            pin=pin
+            password=pin,
+            role=role,
+            id=f"emp_{shortuuid.random(length=8)}"
         )
         return user
 
@@ -35,7 +44,12 @@ class EmployeeSerializer(serializers.ModelSerializer):
         pin = validated_data.pop('pin', None)
         if pin:
             instance.set_password(pin)
-        return super().update(instance, validated_data)
+        if 'role_id' in validated_data:
+            role_id = validated_data.pop('role_id')
+            instance.role = Role.objects.get(id=role_id)
+        instance = super().update(instance, validated_data)
+        instance.save()
+        return instance
 
 
 class UnitSerializer(serializers.ModelSerializer):
@@ -84,8 +98,6 @@ class SupplierSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-# --- Transaction Serializers ---
-
 class CartItemSerializer(serializers.ModelSerializer):
     productId = serializers.PrimaryKeyRelatedField(
         queryset=Product.objects.all(),
@@ -104,7 +116,6 @@ class SalePaymentSerializer(serializers.ModelSerializer):
         fields = ['type', 'amount']
 
 
-# ========= BU QISM O'ZGARDI =========
 class SaleSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True)
     payments = SalePaymentSerializer(many=True)
@@ -125,10 +136,21 @@ class SaleSerializer(serializers.ModelSerializer):
                   'seller']
         read_only_fields = ['id', 'date', 'seller', 'customer']
 
+    # ========= BU METOD O'ZGARDI =========
     def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        payments_data = validated_data.pop('payments')
+
+        # Savdo yaratishdan oldin mahsulot qoldig'ini tekshirish
+        for item_data in items_data:
+            product = item_data['product']
+            if product.stock < item_data['quantity']:
+                raise serializers.ValidationError(
+                    f"'{product.name}' mahsuloti uchun omborda yetarli qoldiq yo'q. "
+                    f"Mavjud: {product.stock}, So'ralyapti: {item_data['quantity']}"
+                )
+
         with transaction.atomic():
-            items_data = validated_data.pop('items')
-            payments_data = validated_data.pop('payments')
             sale_id = f"sale_{shortuuid.random(length=12)}"
             sale = Sale.objects.create(id=sale_id, **validated_data)
 
@@ -148,9 +170,8 @@ class SaleSerializer(serializers.ModelSerializer):
                 customer.debt += debt_payment['amount']
                 customer.save()
             return sale
+    # ========= O'ZGARISH TUGADI =========
 
-
-# ========= O'ZGARISH TUGADI =========
 
 class GoodsReceiptItemSerializer(serializers.ModelSerializer):
     productId = serializers.PrimaryKeyRelatedField(

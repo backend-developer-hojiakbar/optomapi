@@ -24,24 +24,21 @@ class Role(models.Model):
         return self.name
 
 
+# ========= BU QISM O'ZGARDI =========
 class EmployeeManager(BaseUserManager):
-    def create_user(self, phone, name, role, pin=None, password=None):
+    def create_user(self, phone, name=None, password=None, **extra_fields):
         if not phone:
             raise ValueError('Foydalanuvchida telefon raqami bo`lishi shart')
 
-        user = self.model(phone=phone, name=name, role=role)
-
-        final_password = pin if pin is not None else password
-        if not final_password:
-            raise ValueError("PIN yoki parol taqdim etilishi kerak")
-
-        user.set_password(final_password)
+        user = self.model(phone=phone, name=name, **extra_fields)
+        user.set_password(password)
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, phone, name, password=None, **extra_fields):
+    def create_superuser(self, phone, name=None, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
 
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser is_staff=True bo`lishi kerak.')
@@ -55,13 +52,14 @@ class EmployeeManager(BaseUserManager):
                 'permissions': [p[0] for p in Role.Permission.choices]
             }
         )
+        extra_fields.setdefault('role', admin_role)
 
-        return self.create_user(phone, name, admin_role, password=password)
+        return self.create_user(phone, name, password, **extra_fields)
 
 
 class Employee(AbstractBaseUser, PermissionsMixin):
     id = models.CharField(max_length=100, primary_key=True)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, null=True, blank=True)
     phone = models.CharField(max_length=20, unique=True)
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, related_name='employees')
     is_active = models.BooleanField(default=True)
@@ -72,10 +70,12 @@ class Employee(AbstractBaseUser, PermissionsMixin):
     objects = EmployeeManager()
 
     USERNAME_FIELD = 'phone'
-    REQUIRED_FIELDS = ['name']
+    REQUIRED_FIELDS = []
+
+    # ========= O'ZGARISH TUGADI =========
 
     def __str__(self):
-        return self.name
+        return self.name or self.phone
 
     @property
     def pin(self):
