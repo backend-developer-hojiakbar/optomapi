@@ -12,3 +12,4 @@ db.sqlite3
 
 # OS/Editor'ga oid
 .DS_Store
+# .gitignore fayli ichida
