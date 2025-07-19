@@ -23,9 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-66hvyr!u@6br13ft1#bqpnpo)8e$w-y@v5jo=i#$e!3&c^g02%'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['optomapi.florix.uz', 'optom.florix.uz', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -261,4 +261,5 @@ JAZZMIN_SETTINGS = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173", # Vite (React) development server
     "http://127.0.0.1:5173",
+    "http://optom.florix.uz",
 ]
