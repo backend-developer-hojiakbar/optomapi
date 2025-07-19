@@ -1,0 +1,14 @@
+# Virtual Environment
+venv/
+.env
+
+# Django'ga oid
+*.log
+*.pot
+*.pyc
+__pycache__/
+db.sqlite3
+/media/
+
+# OS/Editor'ga oid
+.DS_Store
