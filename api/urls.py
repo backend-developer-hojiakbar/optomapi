@@ -19,4 +19,6 @@ urlpatterns = [
     path('sales/', SaleCreateView.as_view(), name='create-sale'),
     path('goods-receipts/', GoodsReceiptCreateView.as_view(), name='create-goods-receipt'),
     path('debt-payments/', DebtPaymentCreateView.as_view(), name='create-debt-payment'),
+    path('sales/<str:sale_id>/return/', ReturnSaleView.as_view(), name='return-sale'),  # BU QATORNI QO'SHING
+    path('debt-payments/', DebtPaymentCreateView.as_view(), name='create-debt-payment'),
 ]

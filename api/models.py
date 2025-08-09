@@ -124,6 +124,9 @@ class Customer(models.Model):
 
 
 class Sale(models.Model):
+    class SaleStatus(models.TextChoices):
+        COMPLETED = 'completed', 'Yakunlangan'
+        RETURNED = 'returned', 'Qaytarilgan'
     id = models.CharField(max_length=100, primary_key=True)
     date = models.DateTimeField(auto_now_add=True)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
@@ -131,6 +134,7 @@ class Sale(models.Model):
     total = models.DecimalField(max_digits=12, decimal_places=2)
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name='sales')
     seller = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, related_name='sales')
+    status = models.CharField(max_length=10, choices=SaleStatus.choices, default=SaleStatus.COMPLETED)
 
 
 class CartItem(models.Model):

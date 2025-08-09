@@ -9,8 +9,10 @@ from .models import *
 from .serializers import *
 from .permissions import HasPermission
 
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         pin = request.data.get('pin')
         if not pin: return Response({'error': 'PIN is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -25,17 +27,26 @@ class LoginView(APIView):
             return Response({'token': str(refresh.access_token), 'employee': employee_data})
         return Response({'error': 'Invalid PIN'}, status=status.HTTP_401_UNAUTHORIZED)
 
+
 class MeView(generics.RetrieveAPIView):
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated]
+
     def get_object(self): return self.request.user
+
 
 class InitialDataView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, *args, **kwargs):
-        settings_obj, _ = StoreSettings.objects.get_or_create(id='singleton', defaults={'name': 'My Store', 'currency': 'UZS', 'address': 'Default Address', 'phone': 'Default Phone'})
-        goods_receipts_qs = GoodsReceipt.objects.select_related('supplier').prefetch_related('items__product').order_by('-date')[:100]
-        sales_qs = Sale.objects.select_related('seller', 'seller__role', 'customer').prefetch_related('items__product').order_by('-date')[:200]
+        settings_obj, _ = StoreSettings.objects.get_or_create(id='singleton',
+                                                              defaults={'name': 'My Store', 'currency': 'UZS',
+                                                                        'address': 'Default Address',
+                                                                        'phone': 'Default Phone'})
+        goods_receipts_qs = GoodsReceipt.objects.select_related('supplier').prefetch_related('items__product').order_by(
+            '-date')[:100]
+        sales_qs = Sale.objects.select_related('seller', 'seller__role', 'customer').prefetch_related(
+            'items__product').order_by('-date')[:200]
         employees_qs = Employee.objects.select_related('role').all()
         data = {
             'products': ProductSerializer(Product.objects.all(), many=True).data,
@@ -51,11 +62,13 @@ class InitialDataView(APIView):
         }
         return Response(data)
 
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_products'
+
 
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
@@ -63,11 +76,13 @@ class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_customers'
 
+
 class SupplierViewSet(viewsets.ModelViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_suppliers'
+
 
 class RoleViewSet(viewsets.ModelViewSet):
     queryset = Role.objects.all()
@@ -75,32 +90,39 @@ class RoleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_employees'
 
+
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_employees'
 
+
 class UnitViewSet(viewsets.ModelViewSet):
     queryset = Unit.objects.all()
     serializer_class = UnitSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_settings'
+
     def perform_create(self, serializer):
         serializer.save(id=f'unit_{shortuuid.random(6)}')
+
 
 class SettingsView(generics.RetrieveUpdateAPIView):
     serializer_class = StoreSettingsSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_settings'
+
     def get_object(self):
         obj, _ = StoreSettings.objects.get_or_create(id='singleton')
         return obj
+
 
 class SaleCreateView(generics.CreateAPIView):
     serializer_class = SaleSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'use_sales_terminal'
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -109,27 +131,72 @@ class SaleCreateView(generics.CreateAPIView):
         headers = self.get_success_headers(response_serializer.data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+
+class ReturnSaleView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = 'manage_products'
+
+    def post(self, request, sale_id, *args, **kwargs):
+        try:
+            with transaction.atomic():
+                sale_to_return = Sale.objects.select_for_update().get(id=sale_id)
+                if sale_to_return.status == Sale.SaleStatus.RETURNED:
+                    return Response({'error': 'Bu savdo allaqachon qaytarilgan.'}, status=status.HTTP_400_BAD_REQUEST)
+                cart_items = CartItem.objects.filter(sale=sale_to_return)
+                for item in cart_items:
+                    product = Product.objects.get(id=item.product_id)
+                    product.stock += item.quantity
+                    product.save()
+                debt_payment = SalePayment.objects.filter(sale=sale_to_return,
+                                                          type=SalePayment.PaymentType.DEBT).first()
+                if debt_payment and sale_to_return.customer:
+                    customer = sale_to_return.customer
+                    customer.debt -= debt_payment.amount
+                    customer.save()
+                sale_to_return.status = Sale.SaleStatus.RETURNED
+                sale_to_return.save()
+                return Response(SaleSerializer(sale_to_return).data, status=status.HTTP_200_OK)
+        except Sale.DoesNotExist:
+            return Response({'error': 'Savdo topilmadi.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class GoodsReceiptCreateView(generics.CreateAPIView):
     serializer_class = GoodsReceiptSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_warehouse'
 
+
+# ========= BU QISM O'ZGARDI =========
 class DebtPaymentCreateView(generics.CreateAPIView):
     serializer_class = DebtPaymentSerializer
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = 'manage_customers'
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        # Validatsiyadan o'tgan ma'lumotlarni olamiz
+        validated_data = serializer.validated_data
+
         with transaction.atomic():
-            customer_id = serializer.validated_data['customer_id']
-            amount = serializer.validated_data['amount']
-            customer = Customer.objects.get(id=customer_id)
+            # Endi `customer` obyektini to'g'ridan-to'g'ri olamiz
+            customer = validated_data['customer']
+            amount = validated_data['amount']
+
             customer.debt -= amount
             customer.save()
+
             payment = DebtPayment.objects.create(
                 id=f"debt_pay_{shortuuid.random(10)}",
-                customer=customer, amount=amount,
-                paymentType=serializer.validated_data['paymentType']
+                customer=customer,
+                amount=amount,
+                paymentType=validated_data['paymentType']
             )
-        return Response(DebtPaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+        # Javobni qaytarish uchun serializerdan foydalanamiz
+        response_serializer = self.get_serializer(payment)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+# ========= O'ZGARISH TUGADI =========

@@ -99,10 +99,7 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    productId = serializers.PrimaryKeyRelatedField(
-        queryset=Product.objects.all(),
-        source='product'
-    )
+    productId = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), source='product')
     product = ProductSerializer(read_only=True)
 
     class Meta:
@@ -121,14 +118,8 @@ class SaleSerializer(serializers.ModelSerializer):
     payments = SalePaymentSerializer(many=True)
     seller = EmployeeSerializer(read_only=True)
     customer = CustomerSerializer(read_only=True)
-
-    customerId = serializers.PrimaryKeyRelatedField(
-        queryset=Customer.objects.all(),
-        source='customer',
-        write_only=True,
-        required=False,
-        allow_null=True
-    )
+    customerId = serializers.PrimaryKeyRelatedField(queryset=Customer.objects.all(), source='customer', write_only=True,
+                                                    required=False, allow_null=True)
 
     class Meta:
         model = Sale
@@ -136,49 +127,29 @@ class SaleSerializer(serializers.ModelSerializer):
                   'seller']
         read_only_fields = ['id', 'date', 'seller', 'customer']
 
-    # ========= BU METOD O'ZGARDI =========
     def create(self, validated_data):
-        items_data = validated_data.pop('items')
-        payments_data = validated_data.pop('payments')
-
-        # Savdo yaratishdan oldin mahsulot qoldig'ini tekshirish
-        for item_data in items_data:
-            product = item_data['product']
-            if product.stock < item_data['quantity']:
-                raise serializers.ValidationError(
-                    f"'{product.name}' mahsuloti uchun omborda yetarli qoldiq yo'q. "
-                    f"Mavjud: {product.stock}, So'ralyapti: {item_data['quantity']}"
-                )
-
         with transaction.atomic():
+            items_data = validated_data.pop('items')
+            payments_data = validated_data.pop('payments')
             sale_id = f"sale_{shortuuid.random(length=12)}"
             sale = Sale.objects.create(id=sale_id, **validated_data)
-
             for item_data in items_data:
                 CartItem.objects.create(sale=sale, **item_data)
-
                 product = item_data['product']
                 product.stock -= item_data['quantity']
                 product.save()
-
             for payment_data in payments_data:
                 SalePayment.objects.create(sale=sale, **payment_data)
-
             debt_payment = next((p for p in payments_data if p['type'] == 'nasiya'), None)
             if debt_payment and validated_data.get('customer'):
                 customer = validated_data['customer']
                 customer.debt += debt_payment['amount']
                 customer.save()
             return sale
-    # ========= O'ZGARISH TUGADI =========
 
 
 class GoodsReceiptItemSerializer(serializers.ModelSerializer):
-    productId = serializers.PrimaryKeyRelatedField(
-        queryset=Product.objects.all(),
-        source='product',
-        write_only=True
-    )
+    productId = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), source='product', write_only=True)
     product = ProductSerializer(read_only=True)
 
     class Meta:
@@ -188,11 +159,7 @@ class GoodsReceiptItemSerializer(serializers.ModelSerializer):
 
 class GoodsReceiptSerializer(serializers.ModelSerializer):
     items = GoodsReceiptItemSerializer(many=True)
-    supplierId = serializers.PrimaryKeyRelatedField(
-        queryset=Supplier.objects.all(),
-        source='supplier',
-        write_only=True
-    )
+    supplierId = serializers.PrimaryKeyRelatedField(queryset=Supplier.objects.all(), source='supplier', write_only=True)
     supplier = SupplierSerializer(read_only=True)
 
     class Meta:
@@ -205,19 +172,26 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
             items_data = validated_data.pop('items')
             receipt_id = f"rcpt_{shortuuid.random(length=12)}"
             receipt = GoodsReceipt.objects.create(id=receipt_id, **validated_data)
-
             for item_data in items_data:
                 GoodsReceiptItem.objects.create(receipt=receipt, **item_data)
                 product = item_data['product']
                 product.stock += item_data['quantity']
                 product.purchasePrice = item_data['purchasePrice']
                 product.save()
-
             return receipt
 
 
+# ========= BU QISM O'ZGARDI =========
 class DebtPaymentSerializer(serializers.ModelSerializer):
+    customerId = serializers.PrimaryKeyRelatedField(
+        queryset=Customer.objects.all(),
+        source='customer',
+        write_only=True
+    )
+    customer = CustomerSerializer(read_only=True)
+
     class Meta:
         model = DebtPayment
-        fields = ['customerId', 'amount', 'paymentType']
-        extra_kwargs = {'customerId': {'source': 'customer_id'}}
+        fields = ['id', 'customerId', 'customer', 'amount', 'date', 'paymentType']
+        read_only_fields = ['id', 'date', 'customer']
+# ========= O'ZGARISH TUGADI =========
