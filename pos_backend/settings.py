@@ -25,7 +25,8 @@ SECRET_KEY = 'django-insecure-66hvyr!u@6br13ft1#bqpnpo)8e$w-y@v5jo=i#$e!3&c^g02%
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['optomapi.florix.uz', 'optom.florix.uz', 'localhost', '127.0.0.1']
+# Domenlarni qo'shamiz (kelajakdagi frontend uchun ham joy qoldiramiz)
+ALLOWED_HOSTS = ['suvapi.florix.uz', 'suv.florix.uz', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -130,9 +131,9 @@ import os
 # ... boshqa sozlamalar
 
 STATIC_URL = 'static/'
-
-# QO'SHILADIGAN QATOR:
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Sizda bu qator allaqachon bor bo'lishi kerak.
 # Agar bo'lmasa, uni ham qo'shing.
@@ -259,7 +260,7 @@ JAZZMIN_SETTINGS = {
 }
 # CORS sozlamalari (Frontend manzilini ko'rsating)
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173", # Vite (React) development server
-    "http://127.0.0.1:5173",
-    "http://optom.florix.uz",
+    "https://suv.florix.uz", # Kelajakdagi frontend uchun
+    "http://suv.florix.uz",
 ]
+CORS_ALLOW_CREDENTIALS = True
